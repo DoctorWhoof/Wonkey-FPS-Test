@@ -1,0 +1,158 @@
+Namespace fpsdemo
+
+#Import "assets/"
+#Import "<mojo3d>"
+
+#Import "source/CharacterController"
+#Import "source/Group"
+
+#Import "source/echo/Echo"
+#Import "source/clock/Clock"
+#Import "source/mojomaterials/TerrainMaterial"
+
+#Import "source/m2extensions/Entity"
+#Import "source/m2extensions/Collider"
+#Import "source/m2extensions/Model"
+#Import "source/m2extensions/math/Math"
+#Import "source/Player"
+#Import "source/PlayerHuman"
+
+Using mojo3d..
+Using mojo..
+Using std..
+Using m2extensions..
+Using echo..
+Using clock..
+Using mojogame..
+Using group..
+
+Function Main()
+	SetConfig( "MOJO3D_RENDERER","forward" )
+	New AppInstance
+	New FPSWindow( 1280, 720 )
+	App.Run()
+End
+
+
+Class FPSWindow Extends Window
+
+	Field _scene:Scene
+	Field _camera:Camera
+
+	Method New( width:Int, height:Int )
+		Super.New( "FPS Demo", width, height, WindowFlags.Resizable | WindowFlags.Maximized )' | WindowFlags.HighDPI )
+	End
+	
+	Method OnCreateWindow() Override
+		SetConfig( "MOJO3D_RENDERER","forward" )
+		
+		_scene = New Scene
+		_scene.ClearColor = New Color( 0.3, 0.5, 0.9 )
+		_scene.EnvTexture = Texture.Load("asset::textures/white_cliff_top_4k.jpg", TextureFlags.FilterMipmap|TextureFlags.Cubemap|TextureFlags.Envmap )
+		_scene.SkyTexture = _scene.EnvTexture
+		_scene.AmbientLight = New Color( 0.25, 0.3, 0.4 )*1.2' * 0.75
+		_scene.FogFar = 500
+		_scene.FogNear = 1
+		_scene.FogColor = New Color( 0.7, 0.8, 0.9, 0.5 )
+		
+		'Set text overlay
+		Echo.showChildren = True
+		Echo.scale = 1.0
+		
+		'Load GLTF file with hierarchy ("LoadBoned")
+		Local env := Model.LoadBoned( "asset::test_room.glb")
+		Assert( env, "Model load fail")
+		env.Name = "TestRoom"
+		
+		'Create colliders based on object names
+		For Local e := Eachin _scene.GetRootEntities()
+			Local m := Cast<Model>( e )
+			m?.Init()
+		Next
+		
+		'Sun light
+		Local sun := New Light
+		sun.Rotate(45,-30,0)
+		sun.Color = New Color( 1.25, 1.1, 1.0 )
+		sun.CastsShadow = True
+		
+		'Eyecandy
+		Local rays := New GodraysEffect( sun )
+		rays.Exposure = 0.0005
+		rays.Decay = 10.0
+		rays.Color = New Color( 1.0, 0.8, 0.5 )
+		
+		_scene.AddPostEffect( rays )
+		_scene.AddPostEffect( New FXAAEffect )
+		
+		'Hero entity. The camera is parented to it.
+		Local hero := New Pivot
+		hero.Name = "Hero"
+		hero.X = 0
+		hero.Y = 2
+		hero.Z = 8
+		hero.Ry = 180
+
+		Local head := New Pivot
+		head.Name = "Head"
+		head.Parent = hero
+		head.LocalY = .8
+
+		_camera = New Camera
+		_camera.Name = "Camera"
+		_camera.Parent = head
+		_camera.FOV = 60
+		_camera.Near = 0.1
+		_camera.Far = 1000
+		_camera.View = Self
+		_camera.LocalY = 0.0
+
+		'A Player component sends "commands" to a CharacterController, allowing An AI player
+		'to use the exact same CharacterController as a human player.
+		Local player := hero.AddComponent<PlayerHuman>()
+		player.SetControl( Key.W, "Up", "" )
+		player.SetControl( Key.S, "Down", "" )
+		player.SetControl( Key.A, "Left", "" )
+		player.SetControl( Key.D, "Right", "" )
+		player.SetControl( Key.Space, "Jump", "" )
+		player.SetControl( Key.R, "Reset", "" )
+		player.SetControl( Key.F, "Fly", "" )
+		player.SetControl( Key.LeftShift, "Run", "" )
+		
+		Local col := hero.AddComponent<CapsuleCollider>()
+		col.Axis = Axis.Y
+		col.Length = 1.0
+		col.Radius = 0.3
+		
+		Local controller := hero.AddComponent<CharacterController>()
+		controller.collidesWith = Group.Environment | Group.Prop
+		controller.allowGravity = True
+		controller.allowJump = True
+		controller.horizontalAxis = Axis.X
+		controller.verticalAxis = Axis.Z
+		controller.firstPerson = True
+		controller.fpsCamera = _camera
+		
+		'Units are meters per second. Gravity has been adjusted for arcade physics.
+		controller.speed = 6.0
+		controller.jumpSpeed = 6.0
+		controller.slopeSlide = 45
+		_scene.World.Gravity = New Vec3f( 0, -20.0, 0 )
+	End
+	
+	Method OnRender( canvas:Canvas ) Override
+		'Mojo3D basic functions
+		RequestRender()
+		Clock.Update()
+		_scene.Update()
+		_camera.Render( canvas )
+		'Echo Overlay
+		Echo.Add( "FPS: " + App.FPS )
+		Echo.Add(_scene)
+		Echo.Draw( canvas, 5, 25 )
+		'Top Text message
+		canvas.Color = Color.Black
+		canvas.DrawText( "Click to capture mouse, escape to release it. WASD keys to walk, space bar to jump",0,0 )
+	End
+	
+End
