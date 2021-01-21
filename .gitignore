@@ -1,0 +1,9 @@
+*.products
+*.build*
+*.DS_Store
+*backup*
+._*
+_old
+*.mx2*
+*.wx*
+*.geninfo
